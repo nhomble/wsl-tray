@@ -2,7 +2,11 @@
 
 A tiny Windows tray app that shows your WSL2 distros and opens a terminal in any of them.
 
-![WslTray window](docs/screenshot.png)
+Click the tray icon for a menu of your distros; open the full window when you want more detail.
+
+![WslTray tray menu](docs/menu.png)
+
+![WslTray window](docs/window.png)
 
 ## Download
 
@@ -20,7 +24,10 @@ This produces `bin\WslTray.exe`. Set `WSLTRAY_VERSION` (e.g. `0.1.1`) first to s
 
 ## Use
 
-Run `bin\WslTray.exe`; it sits in the tray (left-click opens the window). Double-click a distro to open a terminal.
+Run `bin\WslTray.exe`; it sits in the tray. Click the icon (left or right) for the menu:
+
+- **Distros:** running ones are marked `●`, stopped ones `○`. Click one to open a terminal in it; its submenu has **Open terminal**, **Stop** and **Set default**.
+- **Open window...** shows the full window (disk size, WSL version, VM memory). Double-click a distro there to open a terminal.
 
 - **Terminal:** pick from the installed terminals (or a custom command using `{name}`) in the tray menu or window. Saved in `HKCU\Software\WslTray`.
 - **Flags:** `--show`, `--probe` (JSON state), `--selftest`, `--autostart on|off`.
