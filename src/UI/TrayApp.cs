@@ -144,15 +144,12 @@ namespace WslTray.UI
             miNotify.Click += delegate { Startup.SetNotify(!Startup.GetNotify()); };
             if (dark) { trayMenu.Renderer = new ToolStripProfessionalRenderer(new DarkColors()); trayMenu.BackColor = DarkBack; trayMenu.ForeColor = DarkFore; }
             // one menu for both buttons: rebuilt from the last snapshot each time it opens, then refreshed in place
-            trayMenu.Opening += delegate { SyncTerminalUi(); miLogin.Checked = Startup.IsEnabled(); miNotify.Checked = Startup.GetNotify(); BuildTrayMenu(); RefreshAsync(); };
+            // the menu must be fully built BEFORE it is shown: the shell sizes and places it from its current contents, so
+            // rebuilding inside Opening left it clipped (last items cut off) on the first open
+            trayMenu.Opening += delegate { RefreshAsync(); };
             tray.ContextMenuStrip = trayMenu;
-            tray.MouseClick += delegate (object s, MouseEventArgs e)
-            {
-                if (e.Button != MouseButtons.Left) return;
-                // without foreground ownership the menu would not dismiss when clicking elsewhere
-                Native.SetForegroundWindow(form.Handle);
-                trayMenu.Show(Cursor.Position);
-            };
+            tray.MouseDown += delegate (object s, MouseEventArgs e) { if (e.Button == MouseButtons.Left || e.Button == MouseButtons.Right) PrepareTrayMenu(); };
+            tray.MouseClick += delegate (object s, MouseEventArgs e) { if (e.Button == MouseButtons.Left) ShowTrayMenu(); };
             SetIcon(false);
             tray.Text = "WSL: checking...";
             tray.Visible = true;
@@ -310,6 +307,29 @@ namespace WslTray.UI
         }
 
         // ---- tray menu ----
+        // Left-click: reuse NotifyIcon's own right-click path. It positions the menu relative to the taskbar and takes
+        // foreground so click-away dismisses it; ContextMenuStrip.Show(Cursor.Position) over the taskbar clips the last items.
+        static readonly System.Reflection.MethodInfo ShowContextMenu =
+            typeof(NotifyIcon).GetMethod("ShowContextMenu", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+
+        void PrepareTrayMenu()
+        {
+            SyncTerminalUi(); miLogin.Checked = Startup.IsEnabled(); miNotify.Checked = Startup.GetNotify();
+            BuildTrayMenu();
+            trayMenu.PerformLayout();
+        }
+
+        void ShowTrayMenu()
+        {
+            if (ShowContextMenu != null)
+            {
+                try { ShowContextMenu.Invoke(tray, null); return; }
+                catch (Exception) { }
+            }
+            Native.SetForegroundWindow(form.Handle);
+            trayMenu.Show(Cursor.Position);
+        }
+
         void BuildTrayMenu()
         {
             ToolStripItemCollection it = trayMenu.Items;
