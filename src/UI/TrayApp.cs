@@ -22,7 +22,7 @@ namespace WslTray.UI
         readonly ToolStripStatusLabel versionLabel = new ToolStripStatusLabel();
         readonly Button btnTerm = new Button(), btnStop = new Button(), btnMore = new Button(), btnRefresh = new Button();
         readonly ToolStripMenuItem miDefault = new ToolStripMenuItem("Set default"), miShut = new ToolStripMenuItem("Shut down WSL");
-        readonly ContextMenuStrip moreMenu = new ContextMenuStrip();
+        readonly ContextMenuStrip moreMenu = new ContextMenuStrip(), trayMenu = new ContextMenuStrip();
         readonly bool dark;
         static readonly Color DarkBack = Color.FromArgb(32, 32, 32), DarkFore = Color.FromArgb(235, 235, 235);
         readonly System.Windows.Forms.Timer windowTimer = new System.Windows.Forms.Timer();
@@ -84,11 +84,12 @@ namespace WslTray.UI
             FlowLayoutPanel bar = new FlowLayoutPanel();
             bar.Dock = DockStyle.Top; bar.AutoSize = true; bar.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             bar.WrapContents = true; bar.Padding = new Padding(S(6), S(6), S(6), 0);
-            AddBtn(bar, btnTerm, "Open terminal", OpenTerminal);
-            AddBtn(bar, btnStop, "Stop distro", StopDistro);
+            AddBtn(bar, btnTerm, "Open terminal", delegate { string n = SelectedName(); if (n != null) OpenTerminal(n); });
+            AddBtn(bar, btnStop, "Stop distro", delegate { string n = SelectedName(); if (n != null) StopDistro(n); });
             AddBtn(bar, btnRefresh, "Refresh", delegate { RefreshAsync(); });
             AddBtn(bar, btnMore, "More \u25BE", delegate { moreMenu.Show(btnMore, new Point(0, btnMore.Height)); });
-            miDefault.Click += SetDefault; miShut.Click += ShutDown;
+            miDefault.Click += delegate { string n = SelectedName(); if (n != null) SetDefault(n); };
+            miShut.Click += delegate { ShutDown(); };
             moreMenu.Items.Add(miDefault); moreMenu.Items.Add(miShut);
             // label + combo stay together on their own row
             TableLayoutPanel termBar = new TableLayoutPanel();
@@ -115,7 +116,7 @@ namespace WslTray.UI
             // dock order = reverse of add order: bar, then termBar, then status, and the list fills the rest
             form.Controls.Add(list); form.Controls.Add(status); form.Controls.Add(termBar); form.Controls.Add(bar);
             list.SelectedIndexChanged += delegate { UpdateButtons(); };
-            list.DoubleClick += delegate { OpenTerminal(null, EventArgs.Empty); };
+            list.DoubleClick += delegate { string n = SelectedName(); if (n != null) OpenTerminal(n); };
             UpdateButtons();
 
             form.FormClosing += delegate (object s, FormClosingEventArgs e)
@@ -134,9 +135,6 @@ namespace WslTray.UI
             windowTimer.Interval = 5000; windowTimer.Tick += delegate { RefreshAsync(); };
             trayTimer.Interval = 15000; trayTimer.Tick += delegate { if (!form.Visible) RefreshAsync(); };
 
-            ContextMenuStrip menu = new ContextMenuStrip();
-            menu.Items.Add("Open", null, delegate { ShowWindow(); });
-            menu.Items.Add("Refresh", null, delegate { RefreshAsync(); });
             miLogin.CheckOnClick = false; miNotify.CheckOnClick = false;
             miLogin.Click += delegate
             {
@@ -144,14 +142,17 @@ namespace WslTray.UI
                 catch (Exception ex) { MessageBox.Show(ex.Message, "WSL Tray"); }
             };
             miNotify.Click += delegate { Startup.SetNotify(!Startup.GetNotify()); };
-            menu.Items.Add("-");
-            menu.Items.Add(miTerm);
-            menu.Items.Add(miLogin); menu.Items.Add(miNotify);
-            menu.Items.Add("-");
-            menu.Items.Add("Exit", null, delegate { ExitApp(); });
-            menu.Opening += delegate { miLogin.Checked = Startup.IsEnabled(); miNotify.Checked = Startup.GetNotify(); SyncTerminalUi(); };
-            tray.ContextMenuStrip = menu;
-            tray.MouseClick += delegate (object s, MouseEventArgs e) { if (e.Button == MouseButtons.Left) ShowWindow(); };
+            if (dark) { trayMenu.Renderer = new ToolStripProfessionalRenderer(new DarkColors()); trayMenu.BackColor = DarkBack; trayMenu.ForeColor = DarkFore; }
+            // one menu for both buttons: rebuilt from the last snapshot each time it opens, then refreshed in place
+            trayMenu.Opening += delegate { SyncTerminalUi(); miLogin.Checked = Startup.IsEnabled(); miNotify.Checked = Startup.GetNotify(); BuildTrayMenu(); RefreshAsync(); };
+            tray.ContextMenuStrip = trayMenu;
+            tray.MouseClick += delegate (object s, MouseEventArgs e)
+            {
+                if (e.Button != MouseButtons.Left) return;
+                // without foreground ownership the menu would not dismiss when clicking elsewhere
+                Native.SetForegroundWindow(form.Handle);
+                trayMenu.Show(Cursor.Position);
+            };
             SetIcon(false);
             tray.Text = "WSL: checking...";
             tray.Visible = true;
@@ -258,6 +259,7 @@ namespace WslTray.UI
         void Apply(Snapshot s)
         {
             last = s;
+            UpdateOpenMenu(s);
             if (form.Visible)
             {
                 string sel = SelectedName();
@@ -304,6 +306,79 @@ namespace WslTray.UI
             {
                 lastBalloon = DateTime.UtcNow;
                 tray.ShowBalloonTip(2000, "WSL", key.Length > 0 ? "Running: " + key : "No distros running", ToolTipIcon.Info);
+            }
+        }
+
+        // ---- tray menu ----
+        void BuildTrayMenu()
+        {
+            ToolStripItemCollection it = trayMenu.Items;
+            it.Clear();
+            Snapshot s = last;
+            if (s == null) it.Add(new ToolStripMenuItem("Checking WSL...") { Enabled = false });
+            else
+            {
+                int nRun = s.Running == null ? 0 : s.Running.Count;
+                it.Add(new ToolStripMenuItem(s.Running == null ? "WSL state unknown" : "WSL: " + nRun + " running / " + s.Distros.Count + " installed") { Enabled = false });
+                if (s.Distros.Count == 0) it.Add(new ToolStripMenuItem("No WSL distros found") { Enabled = false });
+                foreach (Distro d in s.Distros) it.Add(DistroItem(d, StateOf(s, d)));
+            }
+            it.Add("-");
+            it.Add("Open window...", null, delegate { ShowWindow(); });
+            it.Add(miTerm);
+            it.Add("Shut down WSL", null, delegate { ShutDown(); });
+            it.Add("-");
+            it.Add(miLogin); it.Add(miNotify);
+            it.Add("-");
+            it.Add("Exit", null, delegate { ExitApp(); });
+            if (dark) StyleTree(it);
+        }
+
+        ToolStripMenuItem DistroItem(Distro d, string state)
+        {
+            string name = d.Name;
+            ToolStripMenuItem mi = new ToolStripMenuItem(); mi.Tag = name;
+            mi.Click += delegate { trayMenu.Close(); OpenTerminal(name); };
+            ToolStripMenuItem open = new ToolStripMenuItem("Open terminal");
+            open.Click += delegate { OpenTerminal(name); };
+            ToolStripMenuItem stop = new ToolStripMenuItem("Stop");
+            stop.Click += delegate { StopDistro(name); };
+            ToolStripMenuItem def = new ToolStripMenuItem("Set default");
+            def.Click += delegate { SetDefault(name); };
+            mi.DropDownItems.Add(open); mi.DropDownItems.Add(stop); mi.DropDownItems.Add(def);
+            ApplyDistroState(mi, d, state);
+            return mi;
+        }
+
+        void ApplyDistroState(ToolStripMenuItem mi, Distro d, string state)
+        {
+            bool running = state == "Running";
+            mi.Text = (running ? "\u25CF " : "\u25CB ") + d.Name + (d.IsDefault ? "  (default)" : "") + (state == "Unknown" ? "  ?" : "");
+            mi.ForeColor = running ? (dark ? DarkFore : SystemColors.ControlText) : (dark ? Color.FromArgb(140, 140, 140) : SystemColors.GrayText);
+            mi.DropDownItems[1].Enabled = running;   // Stop
+            mi.DropDownItems[2].Enabled = !d.IsDefault;
+        }
+
+        // a refresh landing while the menu is open updates rows in place (rebuilding would collapse an open submenu)
+        void UpdateOpenMenu(Snapshot s)
+        {
+            if (!trayMenu.Visible) return;
+            foreach (ToolStripItem ti in trayMenu.Items)
+            {
+                ToolStripMenuItem mi = ti as ToolStripMenuItem;
+                if (mi == null || !(mi.Tag is string)) continue;
+                foreach (Distro d in s.Distros) if (d.Name == (string)mi.Tag) ApplyDistroState(mi, d, StateOf(s, d));
+            }
+        }
+
+        void StyleTree(ToolStripItemCollection items)
+        {
+            foreach (ToolStripItem ti in items)
+            {
+                if (ti.ForeColor == SystemColors.ControlText || ti.ForeColor == SystemColors.MenuText) ti.ForeColor = DarkFore;
+                ti.BackColor = DarkBack;
+                ToolStripDropDownItem dd = ti as ToolStripDropDownItem;
+                if (dd != null && dd.HasDropDownItems) StyleTree(dd.DropDownItems);
             }
         }
 
@@ -404,30 +479,31 @@ namespace WslTray.UI
             }
         }
 
-        void OpenTerminal(object sender, EventArgs e)
+        // MessageBox owner: the window when it is showing, otherwise none (tray/menu flow)
+        IWin32Window Owner { get { return form.Visible ? (IWin32Window)form : null; } }
+
+        void OpenTerminal(string n)
         {
-            string n = SelectedName(); if (n == null) return;
             try
             {
                 LaunchPlan plan = Terminals.Plan(Startup.GetTerminal(), Startup.GetTerminalCustom(), n, Terminals.RealAvail);
-                if (plan.Error != null) { MessageBox.Show(form, plan.Error, "Open terminal"); return; }
-                if (plan.Warning != null) MessageBox.Show(form, plan.Warning, "Open terminal");
+                if (plan.Error != null) { MessageBox.Show(Owner, plan.Error, "Open terminal"); return; }
+                if (plan.Warning != null) MessageBox.Show(Owner, plan.Warning, "Open terminal");
                 ProcessStartInfo psi = new ProcessStartInfo(Terminals.LaunchExe(plan.Exe), plan.Args);
                 psi.UseShellExecute = false;
                 // cmd.exe + 'start' opens its own console window; the helper cmd itself must stay hidden.
                 psi.CreateNoWindow = string.Equals(plan.Exe, "cmd.exe", StringComparison.OrdinalIgnoreCase);
                 Process.Start(psi);
             }
-            catch (Exception ex) { MessageBox.Show(form, ex.Message, "Open terminal"); }
+            catch (Exception ex) { MessageBox.Show(Owner, ex.Message, "Open terminal"); }
             // starting a distro takes a moment; refresh once shortly after without blocking the UI thread
             System.Windows.Forms.Timer t = new System.Windows.Forms.Timer(); t.Interval = 2500;
             t.Tick += delegate { t.Stop(); t.Dispose(); RefreshAsync(); };
             t.Start();
         }
 
-        void StopDistro(object sender, EventArgs e)
+        void StopDistro(string n)
         {
-            string n = SelectedName(); if (n == null) return;
             string msg = "Stop distro '" + n + "'? Running processes inside it will be terminated.";
             MessageBoxIcon icon = MessageBoxIcon.Question;
             if (n.StartsWith("docker-desktop", StringComparison.OrdinalIgnoreCase))
@@ -435,20 +511,19 @@ namespace WslTray.UI
                 msg = "WARNING: '" + n + "' is the Docker Desktop backend. Stopping it will break Docker Desktop and stop all containers until Docker is restarted.\n\nStop it anyway?";
                 icon = MessageBoxIcon.Warning;
             }
-            if (MessageBox.Show(form, msg, "Stop distro", MessageBoxButtons.YesNo, icon, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+            if (MessageBox.Show(Owner, msg, "Stop distro", MessageBoxButtons.YesNo, icon, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
             RunAction("--terminate \"" + n + "\"");
         }
 
-        void SetDefault(object sender, EventArgs e)
+        void SetDefault(string n)
         {
-            string n = SelectedName(); if (n == null) return;
-            if (MessageBox.Show(form, "Make '" + n + "' the default WSL distro?", "Set default", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            if (MessageBox.Show(Owner, "Make '" + n + "' the default WSL distro?", "Set default", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
             RunAction("--set-default \"" + n + "\"");
         }
 
-        void ShutDown(object sender, EventArgs e)
+        void ShutDown()
         {
-            if (MessageBox.Show(form, "Shut down ALL WSL distros and the WSL VM (including Docker Desktop's)?", "Shut down WSL",
+            if (MessageBox.Show(Owner, "Shut down ALL WSL distros and the WSL VM (including Docker Desktop's)?", "Shut down WSL",
                 MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
             RunAction("--shutdown");
         }
