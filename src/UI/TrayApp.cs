@@ -19,6 +19,7 @@ namespace WslTray.UI
         readonly NotifyIcon tray = new NotifyIcon();
         readonly ThemedList list = new ThemedList();
         readonly ToolStripStatusLabel statusLabel = new ToolStripStatusLabel();
+        readonly ToolStripStatusLabel versionLabel = new ToolStripStatusLabel();
         readonly Button btnTerm = new Button(), btnStop = new Button(), btnMore = new Button(), btnRefresh = new Button();
         readonly ToolStripMenuItem miDefault = new ToolStripMenuItem("Set default"), miShut = new ToolStripMenuItem("Shut down WSL");
         readonly ContextMenuStrip moreMenu = new ContextMenuStrip();
@@ -73,7 +74,11 @@ namespace WslTray.UI
 
             StatusStrip status = new StatusStrip();
             statusLabel.Spring = true; statusLabel.TextAlign = ContentAlignment.MiddleLeft;
-            status.Items.Add(statusLabel);
+            // Right-aligned version: fixed width (AutoSize), so the spring label gives way first when the window is narrow.
+            versionLabel.Text = AppVersion.Display(); versionLabel.Alignment = ToolStripItemAlignment.Right;
+            versionLabel.TextAlign = ContentAlignment.MiddleRight;
+            versionLabel.ForeColor = dark ? Color.FromArgb(140, 140, 140) : SystemColors.GrayText;
+            status.Items.Add(statusLabel); status.Items.Add(versionLabel);
             if (dark) { status.Renderer = new ToolStripProfessionalRenderer(new DarkColors()); status.BackColor = DarkBack; status.ForeColor = DarkFore; }
             // buttons: grows in height when it wraps, never clips
             FlowLayoutPanel bar = new FlowLayoutPanel();

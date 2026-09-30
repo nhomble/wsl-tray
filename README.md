@@ -16,7 +16,7 @@ Needs only the .NET Framework compiler that ships with Windows:
 .\build.cmd
 ```
 
-This produces `bin\WslTray.exe`.
+This produces `bin\WslTray.exe`. Set `WSLTRAY_VERSION` (e.g. `0.1.1`) first to stamp a version; the default is `dev`.
 
 ## Use
 

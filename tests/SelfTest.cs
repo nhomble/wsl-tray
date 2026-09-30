@@ -66,6 +66,13 @@ namespace WslTray.Tests
             Check("timeout: slow command killed and reported", to && !ok && ms < 3500);
             Check("missing executable handled", !Wsl.Run("definitely-not-a-real-exe.exe", "", 1000, out code, out o, out to) && !to);
             TerminalTests();
+            Check("version: 'dev' -> dev build", AppVersion.Format("dev") == "dev build");
+            Check("version: null/empty/blank -> dev build", AppVersion.Format(null) == "dev build" && AppVersion.Format("") == "dev build" && AppVersion.Format("  ") == "dev build");
+            Check("version: 0.1.1 -> v0.1.1", AppVersion.Format("0.1.1") == "v0.1.1");
+            Check("version: 0.2.0-rc1 -> v0.2.0-rc1", AppVersion.Format("0.2.0-rc1") == "v0.2.0-rc1");
+            Check("version: 1.0.0+abc.5 -> v1.0.0+abc.5", AppVersion.Format("1.0.0+abc.5") == "v1.0.0+abc.5");
+            Check("version: weird strings shown as-is", AppVersion.Format("ci") == "ci" && AppVersion.Format("1.2") == "1.2" && AppVersion.Format("v0.1.1") == "v0.1.1");
+            Check("version: Display() never empty", AppVersion.Display().Length > 0);
             Console.WriteLine(string.Format("{0}/{1} passed", total - fails, total));
             return fails == 0 ? 0 : 1;
         }

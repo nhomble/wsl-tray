@@ -14,6 +14,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set version from tag
+        shell: pwsh
+        run: |
+          $v = $env:GITHUB_REF_NAME
+          if ($v -notmatch '^v[0-9A-Za-z.+-]+$') { throw "Unexpected tag name: $v" }
+          "WSLTRAY_VERSION=$($v.Substring(1))" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
       - name: Build
         shell: cmd
         run: build.cmd

@@ -27,7 +27,7 @@ namespace WslTray.Core
                     + ", \"vhdxPath\": " + Str(d.VhdxPath) + ", \"vhdxBytes\": " + d.VhdxBytes + "}");
                 b.Append(i < s.Distros.Count - 1 ? ",\n" : "\n");
             }
-            b.Append("  ],\n  \"default\": " + Str(s.DefaultName) + ",\n");
+            b.Append("  ],\n  \"version\": " + Str(AppVersion.Display()) + ",\n  \"default\": " + Str(s.DefaultName) + ",\n");
             b.Append("  \"vmPresent\": " + (s.VmPresent ? "true" : "false") + ",\n  \"vmRamBytes\": " + s.VmRamBytes + ",\n");
             b.Append("  \"running\": ");
             if (s.Running == null) b.Append("null");
