@@ -7,6 +7,7 @@ namespace WslTray.Interop
     {
         [DllImport("user32.dll")] public static extern bool DestroyIcon(IntPtr h);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern uint RegisterWindowMessage(string s);
+        [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
         [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
         [DllImport("user32.dll")] public static extern uint GetGuiResources(IntPtr hProc, uint flags);
         [DllImport("kernel32.dll")] public static extern bool AttachConsole(int pid);
