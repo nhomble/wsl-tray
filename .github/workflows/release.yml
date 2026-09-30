@@ -1,0 +1,38 @@
+name: Release
+
+# Push a tag like v1.0.0 to build and publish bin/WslTray.exe on the Releases page.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        shell: cmd
+        run: build.cmd
+
+      - name: Self-test
+        shell: pwsh
+        run: |
+          $p = Start-Process bin\WslTray.exe -ArgumentList '--selftest' -Wait -PassThru -RedirectStandardOutput selftest.txt
+          Get-Content selftest.txt
+          exit $p.ExitCode
+
+      - name: Checksum
+        shell: pwsh
+        run: |
+          $h = (Get-FileHash bin\WslTray.exe -Algorithm SHA256).Hash.ToLower()
+          "$h  WslTray.exe" | Set-Content -Encoding ascii bin\WslTray.exe.sha256
+
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" bin\WslTray.exe bin\WslTray.exe.sha256 --title "${{ github.ref_name }}" --generate-notes

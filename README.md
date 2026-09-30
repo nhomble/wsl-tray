@@ -4,6 +4,10 @@ A tiny Windows tray app that shows your WSL2 distros and opens a terminal in any
 
 ![WslTray window](docs/screenshot.png)
 
+## Download
+
+Grab `WslTray.exe` from the [Releases](../../releases) page and run it. The exe is unsigned, so Windows SmartScreen may warn on first launch (More info, then Run anyway).
+
 ## Build
 
 Needs only the .NET Framework compiler that ships with Windows:
